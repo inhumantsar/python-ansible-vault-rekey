@@ -9,13 +9,16 @@ import ansible_vault_rekey as rekey
 import logging
 
 
+BACKUP_PATH = ".ansible-vault-rekey-backups"
+
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-log_console = logging.StreamHandler()
-log_console.setLevel(logging.INFO)
-log.addHandler(log_console)
 
+# log_console = logging.StreamHandler()
+# log_console.setLevel(logging.INFO)
+# log.addHandler(log_console)
+#
 @click.command()
 @click.command('--debug', 'debug', default=False)
 @click.option('--repo-path', '-r', 'repo_path', default='.',
@@ -33,32 +36,40 @@ def main(pwdfile, varsfile, generate_only, keep_backups, repo_path, debug):
     if debug:
         log_console.setLevel(logging.DEBUG)
 
-    # find all files
-    files = [varsfile] if varsfile else rekey.find_files(repo_path, '*')
+    # find all YAML files
+    files = [varsfile] if varsfile else rekey.find_files(repo_path)
     count_raw = len(files)
 
-    # note encrypted files
-    encfiles = []
+    vault_files = []
     for f in files:
-        with open(f) as fh:
-            header = f.readline()
-        if header.startswith('$ANSIBLE_VAULT'):
-            encfiles.append((f, None))
+        if rekey.is_file_secret(f):
+            vault_files.append({'file': f})
+            continue
 
-        # check each file for YAML; if YAML, check for for encrypted strings
-        if f.endswith('yml') or f.endswith('yaml'):
-            # returns a generator (list) of key "addresses" where secrets are
-            s = rekey.find_secrets(f)
-            if s:
-                encfiles.append(f, s)
-    print(encfiles)
-
-    # copy encrypted files or files with secrets to encbackup location
+        data = rekey.parse_yaml()
+        secrets = rekey.find_yaml_secrets(data) if data else None
+        if secrets:
+            vault_files.append({'file': f, 'secrets': secrets})
+            continue
+    log.debug('Found vault-enabled files: {}'.format(vault_files))
 
 
-    # copy old vault-password file to encbackupbackup location
+    log.info('Backing up encrypted files...')
+
+    # backup password file
+    rekey.backup_files(pwdfile, BACKUP_PATH)
+
     # decrypt and write files out to unencbackup location (same relative paths)
+    for f in vault_files:
+        newpath = os.path.join(BACKUP_PATH, os.path.basename(f['file']))
+        rekey.decrypt_file(path, pwdfile, newpath)
+        log.debug('Decrypted {} to {}')
+
+
     # generate new password file
+    newpwdfile = os.path.join(os.path.dirname(pwdfile), "{}.new".format(pwdfile))
+    rekey.write_password_file(newpwdfile)
+
     # loop through encrypted asset list, re-encrypt and overwrite originals
     # test decryption of newly written assets
     # remove backups
