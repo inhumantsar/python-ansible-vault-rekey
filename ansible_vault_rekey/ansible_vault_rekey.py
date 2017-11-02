@@ -11,14 +11,15 @@ import subprocess
 import yaml
 
 from ansible_vault import Vault
+from vaultstring import VaultString
 
 """Main module."""
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
-log_console = logging.StreamHandler()
-log_console.setLevel(logging.DEBUG)
-log.addHandler(log_console)
+# log_console = logging.StreamHandler()
+# log_console.setLevel(logging.DEBUG)
+# log.addHandler(log_console)
 
 
 def get_dict_value(data, address):
@@ -67,10 +68,10 @@ def write_password_file(path, password=None, overwrite=False):
     return True
 
 
-def restore_files(files, target_path):
+def restore_files(files, target_path, prefix='.'):
     restored = []
     for f in files:
-        relpath = os.path.realpath(f)[len(os.path.realpath('.'))+1:]
+        relpath = os.path.realpath(f)[len(os.path.realpath(prefix))+1:]
         newpath = os.path.join(target_path, relpath)
         try:
             os.makedirs(os.path.dirname(newpath))
@@ -82,9 +83,9 @@ def restore_files(files, target_path):
     return restored
 
 
-def backup_files(files, backup_path):
+def backup_files(files, backup_path, prefix='.'):
     for f in files:
-        relpath = os.path.realpath(f)[len(os.path.realpath('.'))+1:]
+        relpath = os.path.realpath(f)[len(os.path.realpath(prefix))+1:]
         newpath = os.path.join(backup_path, relpath)
         try:
             os.makedirs(os.path.dirname(newpath))
@@ -99,7 +100,7 @@ def find_files(path, pattern='*.y*ml'):
     for root, dirs, files in os.walk(path):
         for name in files:
             if fnmatch.fnmatch(name, pattern):
-                yield os.path.join(root, name)
+                yield os.path.realpath(os.path.join(root, name))
 
 def is_file_secret(path):
     with open(path) as f:
@@ -114,17 +115,21 @@ def rekey_file(path, password_file, new_password_file):
 def decrypt_file(path, password_file, newpath=None):
     '''Decrypts an Ansible Vault YAML file and returns a dict. Set newpath to
         write the result somewhere.'''
+    # log.debug('decrypt_file({}, {}, {})'.format(path, password_file, newpath))
     if is_file_secret(path):
+        # log.debug('file is fully encrypted')
         with open(password_file) as f:
             vault = Vault(f.read().strip())
+        # log.debug('vault fetched with password file: {}'.format(password_file))
         with open(path) as f:
             r = vault.load(f.read())
+        # log.debug('loaded file: {}'.format(r))
     else:
         r = parse_yaml(path)
         for s in find_yaml_secrets(r):
             v = get_dict_value(r, s)
-            v.set_password_file(password_file)
-            put_dict_value(r, s, v.plaintext)
+            plaintext = v.decrypt(open(password_file).read().strip())
+            put_dict_value(r, s, plaintext)
 
 
     if not r:
@@ -138,6 +143,31 @@ def decrypt_file(path, password_file, newpath=None):
 
     return r
 
+def encrypt_file(path, password_file, newpath=None, secrets=None):
+    '''Encrypts an Ansible Vault YAML file. Returns encrypted data. Set newpath to
+        write the result somewhere. Set secrets to specify inline secret addresses.'''
+    data = parse_yaml(path)
+    if not data:
+        raise ValueError('The YAML file "{}" could not be parsed'.format(path))
+
+    if secrets:
+        for address in secrets:
+            put_dict_value(data, VaultString.encrypt(
+                plaintext=get_dict_value(data, address),
+                password=open(password_file).read().strip()))
+        if newpath:
+            write_yaml(newpath, data)
+        return data
+    else:
+        with open(password_file) as f:
+            vault = Vault(f.read().strip())
+        yaml_str = yaml.dump(data, default_flow_style=False, allow_unicode=True)
+        encrypted = vault.dump(data)
+        with open(newpath, 'w') as f:
+            f.write(encrypted)
+        return encrypted
+
+
 def parse_yaml(path):
     try:
         with open(path) as f:
@@ -145,6 +175,14 @@ def parse_yaml(path):
     except Exception as e:
         log.error('Unable to parse YAML in {}. Exception: {}'.format(path, e))
         return None
+
+
+def write_yaml(path, data):
+    if not os.path.isdir(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    with open(path, 'w+') as f:
+        f.write(yaml.dump(data))
+
 
 def find_yaml_secrets(data, path=None):
     '''Generator which results a list of YAML key paths formatted as lists.
@@ -176,49 +214,3 @@ def find_yaml_secrets(data, path=None):
 
 def contains_yaml_secrets(data):
     return True if len(list(find_yaml_secrets(data))) > 0 else False
-
-
-# Ansible Vault uses custom YAML tags to ID encrypted strings
-# adapted from https://stackoverflow.com/a/43060743/596204
-class VaultString(yaml.YAMLObject):
-    yaml_tag = u'!vault'
-
-    def __init__(self, ciphertext=None, plaintext=None, password_file='vault-password.txt'):
-        self.vault = None
-        self.plaintext = None
-        self.ciphertext = None
-
-        if password_file:
-            self.set_password_file(password_file)
-
-        if ciphertext:
-            self.ciphertext = ciphertext.strip()
-        elif plaintext and self.vault:
-            self.ciphertext = self.vault.dump(plaintext)
-
-        if plaintext:
-            self.plaintext = plaintext.strip()
-        elif ciphertext and self.vault:
-            self.plaintext = self.vault.load(ciphertext)
-
-    def set_password(self, password):
-        self.vault = Vault(password)
-        if self.plaintext and not self.ciphertext:
-            self.ciphertext = self.vault.dump(self.plaintext)
-        elif (not self.plaintext) and self.ciphertext:
-            self.plaintext = self.vault.load(self.ciphertext)
-
-    def set_password_file(self, password_file):
-        if os.path.isfile(password_file):
-            self.set_password(open(password_file,'r').read().strip())
-
-    def __repr__(self):
-        return 'VaultString({:.25}...)'.format(self.ciphertext)
-
-    @classmethod
-    def from_yaml(cls, loader, node):
-        return VaultString(node.value)
-
-    @classmethod
-    def to_yaml(cls, dumper, data):
-        return dumper.represent_scalar(cls.yaml_tag, data.ciphertext)
