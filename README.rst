@@ -60,9 +60,21 @@ Known issues / caveats:
       --help                    Show this message and exit.
 
 
+You can confirm that your secrets were rencryped properly by running debug on an
+encrypted var or file. eg:
+
+.. code-block::
+
+    ansible --vault-password-file vault-password.txt -e "@group_vars/all.yml" -i localhost, -c local -m debug -a var=somesecurevar localhost
+
 
 Installation
 ------------
+
+.. code-block::
+
+    pip install ansible-vault-rekey
+
 
 We have dependencies a couple of layers down which need to compile crypto libraries
 if you haven't already got them. On most systems, you'll need the following:
