@@ -15,6 +15,9 @@ with open('HISTORY.rst') as history_file:
 with open('requirements.txt') as reqs_file:
     requirements = [i.strip() for i in reqs_file.readlines()]
 
+with open('VERSION') as v_file:
+    version = v_file.read().strip()
+
 setup_requirements = [
     'pytest-runner',
 ]
@@ -24,7 +27,7 @@ with open('requirements_dev.txt') as devreqs_file:
 
 setup(
     name='ansible-vault-rekey',
-    version='0.1.0',
+    version=version,
     description="Roll keys and re-encrypt secrets in any repo using Ansible Vault",
     long_description=readme + '\n\n' + history,
     author="Shaun Martin",
