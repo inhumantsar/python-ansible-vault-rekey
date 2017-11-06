@@ -4,6 +4,7 @@
 """The setup script."""
 
 from setuptools import setup, find_packages
+import os
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -11,20 +12,15 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = [
-    'Click>=6.0',
-    # TODO: put package requirements here
-]
+with open('requirements.txt') as reqs_file:
+    requirements = [i.strip() for i in reqs_file.readlines()]
 
 setup_requirements = [
     'pytest-runner',
-    # TODO(inhumantsar): put setup requirements (distutils extensions, etc.) here
 ]
 
-test_requirements = [
-    'pytest',
-    # TODO: put package test requirements here
-]
+with open('requirements_dev.txt') as devreqs_file:
+    test_requirements = [i.strip() for i in devreqs_file.readlines()]
 
 setup(
     name='ansible_vault_rekey',
@@ -37,7 +33,7 @@ setup(
     packages=find_packages(include=['ansible_vault_rekey']),
     entry_points={
         'console_scripts': [
-            'ansible_vault_rekey=ansible_vault_rekey.cli:main'
+            'ansible-vault-rekey=ansible_vault_rekey.cli:main'
         ]
     },
     include_package_data=True,

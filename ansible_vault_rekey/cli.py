@@ -25,7 +25,7 @@ log.addHandler(log_console)
 @click.option('--debug', 'debug', default=False, is_flag=True)
 @click.option('--dry-run', 'dry_run', default=False, is_flag=True,
               help="Skip any action that would overwrite an original file.")
-@click.option('--keep-backups', '-k', 'keep_backups', default=False,
+@click.option('--keep-backups', '-k', 'keep_backups', default=False, is_flag=True,
     help='Keep unencrypted copies of files after a successful rekey.')
 @click.option('--code-path', '-r', 'code_path', default='.',
     help='Path to Ansible code.')
@@ -43,7 +43,8 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
         sys.exit(1)
     code_path = os.path.realpath(code_path)
 
-    backup_path = os.path.join(code_path,".ansible-vault-rekey-backups")
+    backup_path = os.path.join(code_path,".rekey-backups")
+    log.debug('Backup path set to: {}'.format(backup_path))
 
     if not password_file:
         password_file = os.path.join(code_path, 'vault-password.txt')
@@ -63,22 +64,23 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
             vault_files.append({'file': f})
             continue
 
-        data = rekey.parse_yaml(f)
-        secrets = rekey.find_yaml_secrets(data) if data else None
-        # can't len() a generator, so we peek at next(). if it throws StopIteration
-        # then there are no secrets in the file
         try:
-            next(secrets)
-        except StopIteration:
-            # list(secrets) == []
-            continue
-        except TypeError:
-            # secrets == None
+            data = rekey.parse_yaml(f)
+        except Exception as e:
+            log.warning('Unable to parse file, probably not valid yaml: {}'.format(happy_relpath(f)))
             continue
 
-        vault_files.append({'file': f, 'secrets': secrets})
+        # enh, generator. w/e.
+        secrets = list(rekey.find_yaml_secrets(data)) if data else None
+        if secrets and len(secrets) > 0:
+            vault_files.append({'file': f, 'secrets': secrets})
 
-    log.debug('Found vault-enabled files: {}'.format(vault_files))
+    vflog = []
+    for i in vault_files:
+        suffix = " (whole)" if 'secrets' not in i.keys() else ""
+        vflog.append("{}{}".format(happy_relpath(i['file']), suffix))
+
+    log.debug('Found {} vault-enabled files: {}'.format(len(vflog), ', '.join(vflog)))
 
 
     log.info('Backing up encrypted and password files...')
@@ -88,7 +90,8 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
     # decrypt and write files out to unencbackup location (same relative paths)
     for f in vault_files:
         newpath = os.path.join(backup_path, f['file'][len(code_path)+1:])
-        log.debug('Decrypting {} to {} using {}'.format(f['file'], newpath, password_file))
+        log.debug('Decrypting {} to {} using {}'.format(
+            happy_relpath(f['file']), happy_relpath(newpath), happy_relpath(password_file)))
         rekey.decrypt_file(f['file'], password_file, newpath)
 
 
@@ -98,21 +101,21 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
         log.info('>> Dry run enabled, skipping overwrite. <<')
     else:
         rekey.write_password_file(password_file, overwrite=True)
+        log.info('Password file written: {}'.format(happy_relpath(password_file)))
 
 
     # loop through encrypted asset list, re-encrypt and overwrite originals
     log.info('Re-encrypting assets with new password file...')
     for f in vault_files:
-        oldpath = os.path.join(backup_path, f['file'])
+        # log.debug('Raw file obj: {}'.format(f))
+        oldpath = os.path.join(backup_path, happy_relpath(f['file']))
         newpath = os.path.realpath(f['file'])
-        # newpath = os.path.realpath(f['file'])[len(os.path.realpath('.'))+1:]
-        log.debug('Encrypting {} to {}'.format(oldpath, newpath))
+        log.debug('Encrypting {} to {}'.format(happy_relpath(oldpath), happy_relpath(newpath)))
         if dry_run:
             log.info('>> Dry run enabled, skipping overwrite. <<')
             r = True
         else:
-            r = rekey.encrypt_file(oldpath, password_file, newpath,
-                   f['secrets'] if 'secrets' in f.keys() else None)
+            r = rekey.encrypt_file(oldpath, password_file, newpath, f.get('secrets', None))
         if not r:
             log.error('Encryption failed on {}'.format(oldpath))
 
@@ -123,6 +126,12 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
     if not keep_backups:
         log.info('Removing backups...')
         shutil.rmtree(backup_path)
+
+    log.info('Done!')
+
+def happy_relpath(path):
+     return path.replace(os.getcwd(), '.')
+
 
 
 if __name__ == "__main__":

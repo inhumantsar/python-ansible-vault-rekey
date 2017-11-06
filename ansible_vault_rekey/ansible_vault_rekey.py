@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from collections import OrderedDict
+from copy import deepcopy
 import errno
 import fnmatch
 import logging
@@ -14,6 +16,8 @@ from ansible_vault import Vault
 from vaultstring import VaultString
 
 """Main module."""
+yaml.add_representer(VaultString, VaultString.to_yaml, Dumper=yaml.Dumper)
+yaml.add_constructor(VaultString.yaml_tag, VaultString.yaml_constructor)
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
@@ -30,7 +34,7 @@ def get_dict_value(data, address):
         >>> get_dict_value(d, a)
         'someval'
     '''
-    d = data.copy()
+    d = deepcopy(data)
     for key in address:
         try:
             d = d[key]
@@ -47,15 +51,14 @@ def put_dict_value(data, address, value):
         {..., 'mailserver_users': [{...}, {'newkey': 'newval', ...}]}
     '''
     # i had like 15 lines here before finding this: https://stackoverflow.com/a/13688108/596204
-    r = data                    # stash a reference to the outermost obj
     for key in address[:-1]:
         data = data[key]        # dive another layer deep
     data[address[-1]] = value   # set nested obj's value
-    return r                    # return modified outer obj
+    return data                  # return modified outer obj
 
 
 def generate_password(length=128):
-    return ''.join(random.choice(string.printable) for _ in xrange(length))
+    return ''.join(random.choice(string.letters + string.digits + string.punctuation) for _ in xrange(length))
 
 
 def write_password_file(path, password=None, overwrite=False):
@@ -97,8 +100,10 @@ def backup_files(files, backup_path, prefix='.'):
 
 
 def find_files(path, pattern='*.y*ml'):
+    exclude = ['.rekey-backups']
     for root, dirs, files in os.walk(path):
-        for name in files:
+        dirs[:] = [d for d in dirs if d not in exclude]  # this tells python to modify dirs in place
+        for name in files:                               # without creating a new list
             if fnmatch.fnmatch(name, pattern):
                 yield os.path.realpath(os.path.join(root, name))
 
@@ -146,22 +151,32 @@ def decrypt_file(path, password_file, newpath=None):
 def encrypt_file(path, password_file, newpath=None, secrets=None):
     '''Encrypts an Ansible Vault YAML file. Returns encrypted data. Set newpath to
         write the result somewhere. Set secrets to specify inline secret addresses.'''
+    log.debug('Reading decrypted data from {}...'.format(path))
     data = parse_yaml(path)
     if not data:
         raise ValueError('The YAML file "{}" could not be parsed'.format(path))
+    else:
+        log.debug('Got vars: {}'.format(data))
+
+    with open(password_file) as f:
+        p = f.read().strip()
+        log.debug('Read pass from {}: {}'.format(password_file, p))
 
     if secrets:
+        # newdata = data.copy()
+        secrets = list(secrets)
+        log.debug('Received {} secrets: {}'.format(len(secrets), secrets))
         for address in secrets:
-            put_dict_value(data, VaultString.encrypt(
-                plaintext=get_dict_value(data, address),
-                password=open(password_file).read().strip()))
+            plaintext = get_dict_value(data, address)
+            log.debug('Re-encrypting "{}" at {} with new password...'.format(plaintext, address))
+            put_dict_value(data, address,
+                           VaultString.encrypt(plaintext=plaintext, password=p))
         if newpath:
+            log.debug('Writing {} to {}...'.format(data, newpath, p))
             write_yaml(newpath, data)
         return data
     else:
-        with open(password_file) as f:
-            vault = Vault(f.read().strip())
-        yaml_str = yaml.dump(data, default_flow_style=False, allow_unicode=True)
+        vault = Vault(p)
         encrypted = vault.dump(data)
         with open(newpath, 'w') as f:
             f.write(encrypted)
@@ -169,19 +184,15 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
 
 
 def parse_yaml(path):
-    try:
-        with open(path) as f:
-            return yaml.load(f.read())
-    except Exception as e:
-        log.error('Unable to parse YAML in {}. Exception: {}'.format(path, e))
-        return None
+    with open(path) as f:
+        return yaml.load(f, Loader=yaml.Loader)
 
 
 def write_yaml(path, data):
     if not os.path.isdir(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
     with open(path, 'w+') as f:
-        f.write(yaml.dump(data))
+        f.write(yaml.dump(data, default_flow_style=False))
 
 
 def find_yaml_secrets(data, path=None):
@@ -204,13 +215,11 @@ def find_yaml_secrets(data, path=None):
                 for r in result:
                     yield r
             counter += 1
-    if isinstance(data, dict):
+    # log.debug(data)
+    if isinstance(data, dict) or isinstance(data, OrderedDict):
         for k, v in data.iteritems():
             newpath = path + [k]
             result = find_yaml_secrets(v, newpath)
             if result:
                 for r in result:
                     yield r
-
-def contains_yaml_secrets(data):
-    return True if len(list(find_yaml_secrets(data))) > 0 else False

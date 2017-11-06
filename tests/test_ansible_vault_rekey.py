@@ -6,13 +6,13 @@
 import os
 import pytest
 import time
-import yaml
 from os.path import realpath, join
 
 from click.testing import CliRunner
 
 from ansible_vault_rekey import ansible_vault_rekey as rekey
-# from ansible_vault_rekey import cli
+from ansible_vault_rekey.vaultstring import VaultString
+from ansible_vault_rekey import cli
 
 PLAY=realpath('tests/testplay')
 TMP_DIR='/tmp/python-ansible-vault-rekey-{}'.format(str(time.time()))
@@ -48,7 +48,8 @@ def test_parse_yaml_nosecrets():
     assert isinstance(rekey.parse_yaml(join(PLAY, "group_vars/nosecrets.yml")), dict)
 
 def test_parse_yaml_bad():
-    assert rekey.parse_yaml(join(PLAY, "group_vars/bad.yml")) == None
+    with pytest.raises(Exception) as e:
+        rekey.parse_yaml(join(PLAY, "group_vars/bad.yml"))
 
 def test_find_yaml_secrets():
     d = rekey.parse_yaml(join(PLAY, "group_vars/inlinesecrets.yml"))
@@ -57,7 +58,7 @@ def test_find_yaml_secrets():
         ['users', 0, 'password'],
         ['users', 1, 'secrets', 1]
     ]
-    r = rekey.find_yaml_secrets(d)
+    r = list(rekey.find_yaml_secrets(d))
     for i in expected:
         assert i in r
 
@@ -76,7 +77,7 @@ def test_get_dict_value():
     # ]
     r = rekey.find_yaml_secrets(d)
     for address in r:
-        assert isinstance(rekey.get_dict_value(d, address), yaml.YAMLObject)
+        assert isinstance(rekey.get_dict_value(d, address), VaultString)
 
 def test_get_dict_value_bad():
     d = rekey.parse_yaml(join(PLAY, "group_vars/inlinesecrets.yml"))
@@ -99,13 +100,6 @@ def test_put_dict_value():
     assert isinstance(newv, list)
     assert newv == oldval + ['four']
 
-def test_contains_yaml_secrets():
-    d = rekey.parse_yaml(join(PLAY, "group_vars/inlinesecrets.yml"))
-    assert rekey.contains_yaml_secrets(d) == True
-
-def test_contains_yaml_secrets_nosecrets():
-    d = rekey.parse_yaml(join(PLAY, "group_vars/nosecrets.yml"))
-    assert rekey.contains_yaml_secrets(d) == False
 
 def test_vaultstring_encrypt_decrypt():
     plaintext = 'moo too three'
@@ -184,12 +178,14 @@ def test_write_password_file_custompass():
         assert f.read().strip() == 'mootoothree'
 
 
-# def test_command_line_interface():
-#     """Test the CLI."""
-#     runner = CliRunner()
-#     result = runner.invoke(cli.main)
-#     assert result.exit_code == 0
-#     assert 'ansible_vault_rekey.cli.main' in result.output
-#     help_result = runner.invoke(cli.main, ['--help'])
-#     assert help_result.exit_code == 0
-#     assert '--help  Show this message and exit.' in help_result.output
+def test_command_line_interface_help():
+    """Test the CLI."""
+    runner = CliRunner()
+    help_result = runner.invoke(cli.main, ['--help'])
+    assert help_result.exit_code == 0
+    assert 'Show this message and exit.' in help_result.output
+
+def test_command_line_interface_dryrun():
+    runner = CliRunner()
+    dry_run_result = runner.invoke(cli.main, ['--debug', '--dry-run', '-r', PLAY])
+    assert dry_run_result.exit_code == 0
