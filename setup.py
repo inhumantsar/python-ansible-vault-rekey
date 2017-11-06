@@ -23,7 +23,7 @@ with open('requirements_dev.txt') as devreqs_file:
     test_requirements = [i.strip() for i in devreqs_file.readlines()]
 
 setup(
-    name='ansible_vault_rekey',
+    name='ansible-vault-rekey',
     version='0.1.0',
     description="Roll keys and re-encrypt secrets in any repo using Ansible Vault",
     long_description=readme + '\n\n' + history,
@@ -40,7 +40,7 @@ setup(
     install_requires=requirements,
     license="BSD license",
     zip_safe=False,
-    keywords='ansible_vault_rekey',
+    keywords='ansible-vault-rekey',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
