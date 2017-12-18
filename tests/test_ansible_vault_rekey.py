@@ -106,7 +106,7 @@ def test_vaultstring_encrypt_decrypt():
     password_file = join(PLAY, 'vault-password.txt')
     expected = '''$ANSIBLE_VAULT;1.1;AES256'''
     v = rekey.VaultString.encrypt(plaintext=plaintext, password=open(password_file).read().strip())
-    assert v.ciphertext.startswith(expected)
+    assert v.ciphertext.startswith(expected.encode('utf-8'))
 
     decrypted = v.decrypt(password=open(password_file).read().strip())
     assert decrypted == plaintext

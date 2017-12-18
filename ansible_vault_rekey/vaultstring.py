@@ -18,7 +18,7 @@ class VaultString:
     @staticmethod
     def encrypt(plaintext, password):
         vs = VaultString(None)
-        vs.plaintext = plaintext.strip()
+        vs.plaintext = str(plaintext).strip()
         vs.vault = vs.get_vault(password)
         vs.ciphertext = vs.vault.dump(plaintext)
         return vs

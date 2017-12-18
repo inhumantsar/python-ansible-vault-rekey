@@ -9,8 +9,12 @@ import os
 import shutil
 import sys
 
-import ansible_vault_rekey as rekey
-from ansible_vault_rekey import VaultString
+if sys.version_info >= (3, 0):
+    import ansible_vault_rekey.ansible_vault_rekey as rekey
+    from ansible_vault_rekey.vaultstring import VaultString
+else:
+    import ansible_vault_rekey as rekey
+    from vaultstring import VaultString
 
 
 log = logging.getLogger()

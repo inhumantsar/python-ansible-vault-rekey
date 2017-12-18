@@ -61,3 +61,4 @@ target/
 # pyenv python configuration file
 .python-version
 .ansible-vault-rekey-backups/
+.rekey-backups/
