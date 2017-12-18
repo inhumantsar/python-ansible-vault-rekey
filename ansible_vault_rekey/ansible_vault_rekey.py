@@ -11,9 +11,17 @@ import shutil
 import string
 import subprocess
 import yaml
+import sys
 
 from ansible_vault import Vault
-from vaultstring import VaultString
+
+def _is_py3():
+    return True if sys.version_info >= (3, 0) else False
+
+if _is_py3():
+    from ansible_vault_rekey.vaultstring import VaultString
+else:
+    from vaultstring import VaultString
 
 """Main module."""
 yaml.add_representer(VaultString, VaultString.to_yaml, Dumper=yaml.Dumper)
@@ -58,7 +66,7 @@ def put_dict_value(data, address, value):
 
 
 def generate_password(length=128):
-    return ''.join(random.choice(string.letters + string.digits + string.punctuation) for _ in xrange(length))
+    return ''.join(random.choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(length))
 
 
 def write_password_file(path, password=None, overwrite=False):
@@ -217,7 +225,7 @@ def find_yaml_secrets(data, path=None):
             counter += 1
     # log.debug(data)
     if isinstance(data, dict) or isinstance(data, OrderedDict):
-        for k, v in data.iteritems():
+        for k, v in data.items():
             newpath = path + [k]
             result = find_yaml_secrets(v, newpath)
             if result:
