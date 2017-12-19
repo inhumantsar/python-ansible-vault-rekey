@@ -177,10 +177,10 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
         for address in secrets:
             plaintext = get_dict_value(data, address)
             log.debug('Re-encrypting "{}" at {} with new password...'.format(plaintext, address))
-            put_dict_value(data, address,
-                           VaultString.encrypt(plaintext=plaintext, password=p))
+            ciphertext = VaultString.encrypt(plaintext=plaintext, password=p)
+            put_dict_value(data, address, ciphertext)
         if newpath:
-            log.debug('Writing {} to {}...'.format(data, newpath, p))
+            log.debug('Writing {} to {}...'.format(data, newpath))
             write_yaml(newpath, data)
         return data
     else:
@@ -199,7 +199,7 @@ def parse_yaml(path):
 def write_yaml(path, data):
     if not os.path.isdir(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
-    with open(path, 'w+') as f:
+    with open(path, 'w') as f:
         f.write(yaml.dump(data, default_flow_style=False))
 
 

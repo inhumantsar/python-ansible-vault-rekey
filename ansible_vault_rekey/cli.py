@@ -95,14 +95,16 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
     for f in vault_files:
         newpath = os.path.join(backup_path, f['file'][len(code_path)+1:])
         log.debug('Decrypting {} to {} using {}'.format(
-            happy_relpath(f['file']), happy_relpath(newpath), happy_relpath(password_file)))
+            happy_relpath(f['file']),
+            happy_relpath(newpath),
+            happy_relpath(password_file)))
         rekey.decrypt_file(f['file'], password_file, newpath)
 
 
     # generate new password file
     log.info('Generating new password file...')
     if dry_run:
-        log.info('>> Dry run enabled, skipping overwrite. <<')
+        log.info('>> Dry run enabled, skipping overwrite of {}. <<'.format(happy_relpath(password_file)))
     else:
         rekey.write_password_file(password_file, overwrite=True)
         log.info('Password file written: {}'.format(happy_relpath(password_file)))
@@ -112,19 +114,51 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
     log.info('Re-encrypting assets with new password file...')
     for f in vault_files:
         # log.debug('Raw file obj: {}'.format(f))
+        secrets = f.get('secrets', None)
         oldpath = os.path.join(backup_path, happy_relpath(f['file']))
         newpath = os.path.realpath(f['file'])
-        log.debug('Encrypting {} to {}'.format(happy_relpath(oldpath), happy_relpath(newpath)))
+        if secrets:
+            log.debug('Inline secrets specified: {}'.format(secrets))
+
+        log.debug('Encrypting {} to {}'.format(happy_relpath(oldpath),
+                                               happy_relpath(newpath)))
+
         if dry_run:
-            log.info('>> Dry run enabled, skipping overwrite. <<')
+            log.info('>> Dry run enabled, skipping overwrite of {}. <<'.format(happy_relpath(newpath)))
             r = True
         else:
-            r = rekey.encrypt_file(oldpath, password_file, newpath, f.get('secrets', None))
+            r = rekey.encrypt_file(oldpath, password_file, newpath,
+                                   f.get('secrets', None))
+
         if not r:
             log.error('Encryption failed on {}'.format(oldpath))
+            continue
+
+        if not dry_run:
+            # validate encrypted vals by decrypting and comparing
+            log.info('Validating encrypted data...')
+            post = rekey.decrypt_file(newpath, password_file)
+            pre = rekey.parse_yaml(oldpath)
+
+            if secrets:
+                for s in secrets:
+                    log.debug('assert rekey.get_dict_value(pre, s) == rekey.get_dict_value(post, s): {}'.format(
+                        rekey.get_dict_value(pre, s) == rekey.get_dict_value(post, s)))
+                    log.debug('      {}({}) == {}({})'.format(
+                        type(rekey.get_dict_value(pre, s)),
+                        rekey.get_dict_value(pre, s),
+                        type(rekey.get_dict_value(post, s)),
+                        rekey.get_dict_value(post, s)))
+                    assert rekey.get_dict_value(pre, s) == rekey.get_dict_value(post, s)
+            else:
+                log.debug('assert pre == post: {}'.format(pre == post))
+                assert pre == post
+
 
 
     # test decryption of newly written assets?
+    for f in vault_files:
+        log.debug('')
 
     # remove backups
     if not keep_backups:
