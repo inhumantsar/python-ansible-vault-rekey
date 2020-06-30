@@ -186,7 +186,7 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
     else:
         vault = Vault(p)
         encrypted = vault.dump(data)
-        with open(newpath, 'w') as f:
+        with open(newpath, 'wb') as f:
             f.write(encrypted)
         return encrypted
 
