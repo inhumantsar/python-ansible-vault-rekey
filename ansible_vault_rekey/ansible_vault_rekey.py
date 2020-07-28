@@ -39,7 +39,7 @@ def write_password_file(path, password=None, overwrite=False):
 def restore_files(files, target_path, prefix='.'):
     restored = []
     for f in files:
-        relpath = os.path.realpath(f)[len(os.path.realpath(prefix))+1:]
+        relpath = os.path.realpath(f)[len(os.path.realpath(prefix)) + 1:]
         newpath = os.path.join(target_path, relpath)
         try:
             os.makedirs(os.path.dirname(newpath))
@@ -53,7 +53,7 @@ def restore_files(files, target_path, prefix='.'):
 
 def backup_files(files, backup_path, prefix='.'):
     for f in files:
-        relpath = os.path.realpath(f)[len(os.path.realpath(prefix))+1:]
+        relpath = os.path.realpath(f)[len(os.path.realpath(prefix)) + 1:]
         newpath = os.path.join(backup_path, relpath)
         try:
             os.makedirs(os.path.dirname(newpath))
@@ -91,7 +91,6 @@ def decrypt_file(path, password_file, newpath=None):
             decrypted = vault.decrypt(f.read())
         # log.debug('loaded file: {}'.format(decrypted))
 
-
     if not decrypted:
         raise ValueError('The Vault library extracted nothing from the file. Is it actually encrypted?')
 
@@ -111,7 +110,7 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
         data = f.read()
 
     if not data:
-        raise ValueError('Unable to parse/read file'.format(path))
+        raise ValueError('Unable to parse/read file {}'.format(path))
     else:
         log.debug('Got vars/file: {}'.format(data))
 
