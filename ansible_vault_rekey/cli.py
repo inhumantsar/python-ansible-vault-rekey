@@ -3,16 +3,15 @@
 """(Re)keys Ansible Vault repos."""
 
 import click
-import fnmatch
 import logging
 import os
 import shutil
 import sys
+from ansible.constants import DEFAULT_VAULT_ID_MATCH
+from ansible.parsing.vault import VaultSecret
 
 if sys.version_info >= (3, 0):
     import ansible_vault_rekey.ansible_vault_rekey as rekey
-    from ansible.constants import DEFAULT_VAULT_ID_MATCH
-    from ansible.parsing.vault import VaultSecret
 else:
     import ansible_vault_rekey as rekey
 
