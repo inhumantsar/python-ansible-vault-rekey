@@ -11,10 +11,10 @@ import sys
 
 if sys.version_info >= (3, 0):
     import ansible_vault_rekey.ansible_vault_rekey as rekey
-    from ansible_vault_rekey.vaultstring import VaultString
+    from ansible.constants import DEFAULT_VAULT_ID_MATCH
+    from ansible.parsing.vault import VaultSecret
 else:
     import ansible_vault_rekey as rekey
-    from vaultstring import VaultString
 
 
 log = logging.getLogger()
@@ -36,7 +36,7 @@ log.addHandler(log_console)
 @click.option('--password-file', '-p', 'password_file', default=None,
     type=str, help='Path to password file. Default: vault-password.txt')
 @click.option('--vars-file', '-v', 'varsfile', type=str, default=None,
-    help='Only operate on the file specified. Default is to check every YAML file in Ansible role/play dirs for encrypted assets.')
+    help='Only operate on the file specified. Default is to check every file in Ansible role/play dirs for encrypted assets.')
 def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
     """(Re)keys Ansible Vault repos."""
     if debug:
@@ -59,7 +59,7 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
         password_file = os.path.realpath(password_file)
 
 
-    # find all YAML files
+    # find all files
     files = [os.path.realpath(varsfile)] if varsfile else rekey.find_files(code_path)
 
     vault_files = []
@@ -69,22 +69,19 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
             continue
 
         try:
-            data = rekey.parse_yaml(f)
+            passwords = []
+            with open(password_file, 'rb') as pf:
+                data = rekey.parse_yaml(f, [(DEFAULT_VAULT_ID_MATCH, VaultSecret(pf.read().strip()))])
         except Exception as e:
-            log.warning('Unable to parse file, probably not valid yaml: {}'.format(happy_relpath(f)))
+            log.debug('Unable to parse file, probably not valid yaml: {}  error: {}'.format(happy_relpath(f), e))
             continue
-
-        # enh, generator. w/e.
-        secrets = list(rekey.find_yaml_secrets(data)) if data else None
-        if secrets and len(secrets) > 0:
-            vault_files.append({'file': f, 'secrets': secrets})
 
     vflog = []
     for i in vault_files:
         suffix = " (whole)" if 'secrets' not in i.keys() else ""
         vflog.append("{}{}".format(happy_relpath(i['file']), suffix))
 
-    log.debug('Found {} vault-enabled files: {}'.format(len(vflog), ', '.join(vflog)))
+    log.info('Found {} vault-enabled files: {}'.format(len(vflog), ', '.join(vflog)))
 
 
     log.info('Backing up encrypted and password files...')
