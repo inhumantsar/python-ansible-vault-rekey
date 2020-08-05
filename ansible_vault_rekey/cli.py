@@ -7,8 +7,8 @@ import logging
 import os
 import shutil
 import sys
-from ansible.constants import DEFAULT_VAULT_ID_MATCH
-from ansible.parsing.vault import VaultSecret
+
+from ansible.parsing.vault import is_encrypted_file
 
 if sys.version_info >= (3, 0):
     import ansible_vault_rekey.ansible_vault_rekey as rekey
@@ -63,16 +63,23 @@ def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
 
     vault_files = []
     for f in files:
-        if rekey.is_file_secret(f):
-            vault_files.append({'file': f})
-            continue
+        with open(f, 'rb') as stream:
+            if is_encrypted_file(stream):
+                vault_files.append({'file': f})
+                continue
 
-        try:
-            with open(password_file, 'rb') as pf:
-                rekey.parse_yaml(f, [(DEFAULT_VAULT_ID_MATCH, VaultSecret(pf.read().strip()))])
-        except Exception as e:
-            log.debug('Unable to parse file, probably not valid yaml: {}  error: {}'.format(happy_relpath(f), e))
-            continue
+            if b'$ANSIBLE_VAULT;1.1;AES256' in stream.read():
+                # inline secrets
+                try:
+                    data = rekey.parse_yaml(f)
+                except Exception as e:
+                    log.warning('Unable to parse file, probably not valid yaml: {} {}'.format(happy_relpath(f), e))
+                    continue
+
+                # enh, generator. w/e.
+                secrets = list(rekey.find_yaml_secrets(data)) if data else None
+                if secrets and len(secrets) > 0:
+                    vault_files.append({'file': f, 'secrets': secrets})
 
     vflog = []
     for i in vault_files:
