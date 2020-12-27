@@ -32,7 +32,7 @@ setup(
     long_description=readme + '\n\n' + history,
     author="Shaun Martin",
     author_email='shaun@samsite.ca',
-    url='https://github.com/inhumantsar/ansible_vault_rekey',
+    url='https://github.com/inhumantsar/python-ansible-vault-rekey',
     packages=find_packages(include=['ansible_vault_rekey']),
     entry_points={
         'console_scripts': [
