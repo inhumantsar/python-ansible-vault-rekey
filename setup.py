@@ -18,12 +18,9 @@ with open('requirements.txt') as reqs_file:
 with open('VERSION') as v_file:
     version = v_file.read().strip()
 
-setup_requirements = [
-    'pytest-runner',
+test_requirements = [
+    'tox',
 ]
-
-with open('requirements_dev.txt') as devreqs_file:
-    test_requirements = [i.strip() for i in devreqs_file.readlines()]
 
 setup(
     name='ansible-vault-rekey',
@@ -57,5 +54,4 @@ setup(
     ],
     test_suite='tests',
     tests_require=test_requirements,
-    setup_requires=setup_requirements,
 )
