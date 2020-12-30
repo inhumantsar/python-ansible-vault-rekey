@@ -1,4 +1,2 @@
-click==7.1.2
-ansible_vault==1.1.1
-ansible==2.9.10
-ruamel.yaml==0.16.12
+click~=7.1.2
+ansible~=2.9.10
