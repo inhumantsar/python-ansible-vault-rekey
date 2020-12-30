@@ -10,11 +10,10 @@ import random
 import shutil
 import string
 import yaml
-import sys
 import subprocess
 
 from ansible.constants import DEFAULT_VAULT_ID_MATCH
-from ansible.parsing.vault import VaultLib, VaultSecret, get_file_vault_secret, is_encrypted_file
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 from ansible_vault_rekey.vaultstring import VaultString
 
