@@ -16,15 +16,7 @@ import subprocess
 from ansible.constants import DEFAULT_VAULT_ID_MATCH
 from ansible.parsing.vault import VaultLib, VaultSecret, get_file_vault_secret, is_encrypted_file
 
-
-def _is_py3():
-    return True if sys.version_info >= (3, 0) else False
-
-
-if _is_py3():
-    from ansible_vault_rekey.vaultstring import VaultString
-else:
-    from vaultstring import VaultString
+from ansible_vault_rekey.vaultstring import VaultString
 
 """Main module."""
 yaml.add_representer(VaultString, VaultString.to_yaml, Dumper=yaml.Dumper)
