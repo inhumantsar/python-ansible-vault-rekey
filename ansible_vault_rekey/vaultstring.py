@@ -1,6 +1,6 @@
-import os
-import yaml
-from ansible_vault import Vault
+from ansible.constants import DEFAULT_VAULT_ID_MATCH
+from ansible.parsing.vault import VaultLib
+from ansible.parsing.vault import VaultSecret
 
 
 # Ansible Vault uses custom YAML tags to ID encrypted strings
@@ -13,24 +13,24 @@ class VaultString:
 
     def __init__(self, ciphertext):
         self.plaintext = None
-        self.ciphertext = ciphertext.strip() if isinstance(ciphertext,str) else ciphertext
+        self.ciphertext = ciphertext.strip() if isinstance(ciphertext, str) else ciphertext
 
     @staticmethod
     def encrypt(plaintext, password):
         vs = VaultString(None)
         vs.plaintext = str(plaintext).strip()
         vs.vault = vs.get_vault(password)
-        vs.ciphertext = vs.vault.dump(plaintext)
+        vs.ciphertext = vs.vault.encrypt(plaintext)
         return vs
 
     def decrypt(self, password):
         v = self.get_vault(password)
-        self.plaintext = v.load(self.ciphertext)
+        self.plaintext = v.decrypt(self.ciphertext)
         return self.plaintext
 
     @staticmethod
     def get_vault(password):
-        return Vault(password)
+        return VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(password.encode('utf-8')))])
 
     # for ruamel.yaml
     @staticmethod
