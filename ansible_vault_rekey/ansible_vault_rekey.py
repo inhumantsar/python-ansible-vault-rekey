@@ -161,7 +161,7 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
     """Encrypts an Ansible Vault file. Returns encrypted data. Set newpath to
         write the result somewhere. Set secrets to specify inline secret addresses."""
     # log.debug('Reading decrypted data from {}...'.format(path))
-    with open(path, 'rb') as f:
+    with open(path, 'r') as f:
         data = f.read()
 
     if not data:
@@ -173,11 +173,26 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
         p = f.read().strip()
         log.debug('Read pass from {}: {}'.format(password_file, p))
 
-    vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(p.encode('utf-8')))])
-    encrypted = vault.encrypt(data)
-    with open(newpath, 'wb') as f:
-        f.write(encrypted)
-    return encrypted
+    if secrets:
+        data = parse_yaml(path)
+        # newdata = data.copy()
+        secrets = list(secrets)
+        log.debug('Received {} secrets: {}'.format(len(secrets), secrets))
+        for address in secrets:
+            plaintext = get_dict_value(data, address)
+            log.debug('Re-encrypting "{}" at {} with new password...'.format(plaintext, address))
+            put_dict_value(data, address,
+                           VaultString.encrypt(plaintext=plaintext, password=p))
+        if newpath:
+            log.debug('Writing {} to {}...'.format(data, newpath, p))
+            write_yaml(newpath, data)
+        return data
+    else:
+        vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(p.encode('utf-8')))])
+        encrypted = vault.encrypt(data)
+        with open(newpath, 'wb') as f:
+            f.write(encrypted)
+        return encrypted
 
 
 def parse_yaml(path):
