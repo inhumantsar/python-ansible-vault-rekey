@@ -184,7 +184,7 @@ def encrypt_file(path, password_file, newpath=None, secrets=None):
             put_dict_value(data, address,
                            VaultString.encrypt(plaintext=plaintext, password=p))
         if newpath:
-            log.debug('Writing {} to {}...'.format(data, newpath, p))
+            log.debug('Writing {} to {}...'.format(data, newpath))
             write_yaml(newpath, data)
         return data
     else:
