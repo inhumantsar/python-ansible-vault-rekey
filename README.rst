@@ -17,10 +17,9 @@ ansible-vault-rekey
      :target: https://pyup.io/repos/github/inhumantsar/python-ansible-vault-rekey/
      :alt: Updates
 
-.. image:: https://pyup.io/repos/github/inhumantsar/python-ansible-vault-rekey/python-3-shield.svg
-    :target: https://pyup.io/repos/github/inhumantsar/python-ansible-vault-rekey/
-    :alt: Python 3
-
+.. image:: https://img.shields.io/badge/python-3.6%20|%203.7%20|%203.8%20|%203.9-green
+     :target: https://www.python.org/doc/versions/
+     :alt: Python version supported
 
 Roll keys and re-encrypt secrets in any repo using Ansible Vault
 
@@ -101,7 +100,7 @@ Manually:
 
 .. code-block::
 
-    pip install -r requirements.txt -r requirements_dev.txt && python2.7 -m pytest tests/*.py
+    pip install -r requirements.txt pytest & python -m pytest tests/*.py
 
 Credits
 ---------
