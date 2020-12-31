@@ -9,10 +9,6 @@ ansible-vault-rekey
 .. image:: https://img.shields.io/travis/inhumantsar/python-ansible-vault-rekey.svg
         :target: https://travis-ci.org/inhumantsar/python-ansible-vault-rekey
 
-.. image:: https://readthedocs.org/projects/ansible-vault-rekey/badge/?version=latest
-        :target: https://ansible-vault-rekey.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
-
 .. image:: https://pyup.io/repos/github/inhumantsar/python-ansible-vault-rekey/shield.svg
      :target: https://pyup.io/repos/github/inhumantsar/python-ansible-vault-rekey/
      :alt: Updates
@@ -25,7 +21,6 @@ Roll keys and re-encrypt secrets in any repo using Ansible Vault
 
 
 * Free software: BSD license
-* Documentation: https://ansible-vault-rekey.readthedocs.io.
 
 Usage
 -----
