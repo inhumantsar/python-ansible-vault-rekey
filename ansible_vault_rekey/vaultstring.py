@@ -20,7 +20,7 @@ class VaultString:
         vs = VaultString(None)
         vs.plaintext = str(plaintext).strip()
         vs.vault = vs.get_vault(password)
-        vs.ciphertext = vs.vault.encrypt(plaintext)
+        vs.ciphertext = vs.vault.encrypt(plaintext).decode('utf-8')
         return vs
 
     def decrypt(self, password):
