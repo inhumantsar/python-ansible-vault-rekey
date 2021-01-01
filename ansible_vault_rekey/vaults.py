@@ -1,13 +1,16 @@
 import yaml
+import logging
 
 from pathlib import Path
-from collections import OrderedDict
 from copy import deepcopy
+from collections import OrderedDict
 
 from ansible.constants import DEFAULT_VAULT_ID_MATCH
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 from ansible_vault_rekey.vaultstring import VaultString
+
+log = logging.getLogger()
 
 yaml.add_representer(VaultString, VaultString.to_yaml, Dumper=yaml.Dumper)
 yaml.add_constructor(VaultString.yaml_tag, VaultString.yaml_constructor)
@@ -26,8 +29,12 @@ class VaultFile:
         self.rel_path = rel_path
         self.path = rel_path.resolve()
         self.secrets = []
+        self.content = None
 
     def __str__(self):
+        return str(self.rel_path)
+
+    def __resp__(self):
         return f"<{self.__class__.__name__} {self.rel_path}>"
 
     def has_secrets(self):
@@ -36,16 +43,24 @@ class VaultFile:
     def is_decrypted(self):
         return (self.content != None)
 
-    def decrypt(password):
-        vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(password))])
-        self.content = vault.decrypt(f.read())
-
-    def encrypt(password):
-        vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(password.encode('utf-8')))])
-        encrypted = vault.encrypt(self.content)
+    def decrypt(self, password):
+        vault = self._get_vault(password)
 
         with self.path.open('rb') as f:
+            self.content = vault.decrypt(f.read())
+
+    def encrypt(self, password):
+        vault = self._get_vault(password)
+        encrypted = vault.encrypt(self.content)
+
+        with self.path.open('wb') as f:
             f.write(encrypted)
+
+    def _get_vault(self, password):
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+
+        return VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(password))])
 
 
 class PartialVaultFile(VaultFile):
@@ -73,22 +88,43 @@ class PartialVaultFile(VaultFile):
         # Store all secrets defined in YAML file
         self.secrets = list(self.find_secrets(self.yaml))
 
-    def decrypt(password):
+    def decrypt(self, password):
         self.content = deepcopy(self.yaml)
+        vault = self._get_vault(password)
+
         for secret in self.secrets:
             entry = self.content
 
             for key in secret:
                 entry = entry[key]
 
-            vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(password))])
-            plaintext = vault.decrypt(entry).decode('utf-8')
+            plaintext = vault.decrypt(entry.ciphertext).decode('utf-8').strip()
 
             entry = self.content
-            for key in secret:
+            for key in secret[:-1]:
                 entry = entry[key]
             entry[secret[-1]] = plaintext
 
+    def encrypt(self, password):
+        encrypted = deepcopy(self.content)
+        vault = self._get_vault(password)
+
+        for secret in self.secrets:
+            entry = self.content
+
+            for key in secret:
+                entry = entry[key]
+
+            ciphertext = vault.encrypt(entry).decode('utf-8').strip()
+
+            entry = encrypted
+            for key in secret[:-1]:
+                entry = entry[key]
+            entry[secret[-1]] = VaultString(ciphertext)
+
+        with self.path.open('w') as f:
+            print(self.path)
+            f.write(yaml.dump(encrypted, default_flow_style=False))
 
     def find_secrets(self, data, path=None):
         """Generator which results a list of YAML key paths formatted as lists.
