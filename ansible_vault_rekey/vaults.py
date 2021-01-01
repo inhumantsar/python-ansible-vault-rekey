@@ -24,10 +24,14 @@ class VaultFile:
 
     def __init__(self, path):
         self.path = Path(path)
+        self.secrets = []
 
     def __str__(self):
         rel_path = self.path.relative_to(Path.cwd())
         return f"<{self.__class__.__name__} {rel_path}>"
+
+    def has_secrets(self):
+        return bool(self.secrets)
 
     def is_decrypted(self):
         return (self.content != None)
@@ -67,7 +71,7 @@ class PartialVaultFile(VaultFile):
             self.yaml = yaml.load(f, Loader=yaml.Loader)
 
         # Store all secrets defined in YAML file
-        self.secrets = self.find_secrets(self.yaml)
+        self.secrets = list(self.find_secrets(self.yaml))
 
     def decrypt(password):
         self.content = deepcopy(self.yaml)
