@@ -1,6 +1,7 @@
 import yaml
 
 from pathlib import Path
+from collections import OrderedDict
 from copy import deepcopy
 
 from ansible.constants import DEFAULT_VAULT_ID_MATCH
@@ -14,15 +15,16 @@ yaml.add_constructor(VaultString.yaml_tag, VaultString.yaml_constructor)
 class VaultFile:
 
     @staticmethod
-    def vault_generator(path):
-        with open(path, 'rb') as f:
-            if f.readline().startswith(b'$ANSIBLE_VAULT;1.1;AES256'):
+    def generator(path):
+        with open(path, 'r') as f:
+            if f.readline().startswith('$ANSIBLE_VAULT;1.1;AES256'):
                 return VaultFile(path)
             else:
                 return PartialVaultFile(path)
 
     def __init__(self, path):
-        self.path = Pathlib(path)
+        self.path = Path(path)
+
 
     def is_decrypted(self):
         return (self.content != None)
@@ -54,8 +56,8 @@ class PartialVaultFile(VaultFile):
         def to_yaml(dumper, data):
             return dumper.represent_scalar(data.yaml_tag, data.ciphertext, style='|')
 
-    def __init__(self, **kwargs):
-        super.__init__(**kwargs)
+    def __init__(self, path):
+        super().__init__(path)
 
         # Parse YAML file
         with self.path.open('r') as f:
@@ -83,7 +85,7 @@ class PartialVaultFile(VaultFile):
 
     def find_secrets(self, data, path=None):
         """Generator which results a list of YAML key paths formatted as lists.
-                >>> for i in find_yaml_secrets(data):
+                >>> for i in find_secrets(data):
                 ...   print(i)
                 ...
                 ['test_password']                       # data['test_password']
@@ -96,7 +98,7 @@ class PartialVaultFile(VaultFile):
             counter = 0
             for item in data:
                 newpath = path + [counter]
-                result = self.find_yaml_secrets(item, newpath)
+                result = self.find_secrets(item, newpath)
                 if result:
                     for r in result:
                         yield r
@@ -105,7 +107,7 @@ class PartialVaultFile(VaultFile):
         if isinstance(data, dict) or isinstance(data, OrderedDict):
             for k, v in data.items():
                 newpath = path + [k]
-                result = self.find_yaml_secrets(v, newpath)
+                result = self.find_secrets(v, newpath)
                 if result:
                     for r in result:
                         yield r
