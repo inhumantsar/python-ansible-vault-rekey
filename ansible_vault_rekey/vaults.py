@@ -41,7 +41,7 @@ class VaultFile:
         return bool(self.secrets)
 
     def is_decrypted(self):
-        return (self.content != None)
+        return self.content is not None
 
     def decrypt(self, password):
         vault = self._get_vault(password)
@@ -55,6 +55,15 @@ class VaultFile:
 
         with self.path.open('wb') as f:
             f.write(encrypted)
+
+    def backup(self, backup_dir):
+        backup_path = backup_dir / self.rel_path
+
+        # Create all required directories if not already exists
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with backup_path.open('wb') as f:
+            f.write(self.content)
 
     def _get_vault(self, password):
         if isinstance(password, str):
@@ -123,8 +132,16 @@ class PartialVaultFile(VaultFile):
             entry[secret[-1]] = VaultString(ciphertext)
 
         with self.path.open('w') as f:
-            print(self.path)
             f.write(yaml.dump(encrypted, default_flow_style=False))
+
+    def backup(self, backup_dir):
+        backup_path = backup_dir / self.rel_path
+
+        # Create all required directories if not already exists
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with backup_path.open('w') as f:
+            f.write(yaml.dump(self.content, default_flow_style=False))
 
     def find_secrets(self, data, path=None):
         """Generator which results a list of YAML key paths formatted as lists.
