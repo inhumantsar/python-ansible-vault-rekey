@@ -25,6 +25,9 @@ class VaultFile:
     def __init__(self, path):
         self.path = Path(path)
 
+    def __str__(self):
+        rel_path = self.path.relative_to(Path.cwd())
+        return f"<{self.__class__.__name__} {rel_path}>"
 
     def is_decrypted(self):
         return (self.content != None)
