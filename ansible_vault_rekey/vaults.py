@@ -22,13 +22,13 @@ class VaultFile:
             else:
                 return PartialVaultFile(path)
 
-    def __init__(self, path):
-        self.path = Path(path)
+    def __init__(self, rel_path):
+        self.rel_path = rel_path
+        self.path = rel_path.resolve()
         self.secrets = []
 
     def __str__(self):
-        rel_path = self.path.relative_to(Path.cwd())
-        return f"<{self.__class__.__name__} {rel_path}>"
+        return f"<{self.__class__.__name__} {self.rel_path}>"
 
     def has_secrets(self):
         return bool(self.secrets)
