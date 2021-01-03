@@ -9,6 +9,7 @@ from ansible.constants import DEFAULT_VAULT_ID_MATCH
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 from ansible_vault_rekey.vaultstring import VaultString
+from ansible_vault_rekey.exceptions import EncryptError, DecryptError, BackupError
 
 log = logging.getLogger()
 
@@ -44,26 +45,36 @@ class VaultFile:
         return self.content is not None
 
     def decrypt(self, password):
-        vault = self._get_vault(password)
+        try:
+            vault = self._get_vault(password)
 
-        with self.path.open('rb') as f:
-            self.content = vault.decrypt(f.read())
+            with self.path.open('rb') as f:
+                self.content = vault.decrypt(f.read())
+        except Exception as e:
+            raise DecryptError(e.message)
 
     def encrypt(self, password):
-        vault = self._get_vault(password)
-        encrypted = vault.encrypt(self.content)
+        try:
+            vault = self._get_vault(password)
+            encrypted = vault.encrypt(self.content)
 
-        with self.path.open('wb') as f:
-            f.write(encrypted)
+            with self.path.open('wb') as f:
+                f.write(encrypted)
+
+        except Exception as e:
+            raise EncryptError(e.message)
 
     def backup(self, backup_dir):
-        backup_path = backup_dir / self.rel_path
+        try:
+            backup_path = backup_dir / self.rel_path
 
-        # Create all required directories if not already exists
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create all required directories if not already exists
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with backup_path.open('wb') as f:
-            f.write(self.content)
+            with backup_path.open('wb') as f:
+                f.write(self.content)
+        except Exception as e:
+            raise BackupError(e.message)
 
     def _get_vault(self, password):
         if isinstance(password, str):
