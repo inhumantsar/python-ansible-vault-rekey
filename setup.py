@@ -33,7 +33,7 @@ setup(
     packages=find_packages(include=['ansible_vault_rekey']),
     entry_points={
         'console_scripts': [
-            'ansible-vault-rekey=ansible_vault_rekey.cli:main'
+            'ansible-vault-rekey=ansible_vault_rekey.__main__:main'
         ]
     },
     include_package_data=True,

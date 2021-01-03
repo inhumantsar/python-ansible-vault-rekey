@@ -8,17 +8,15 @@ import os
 import shutil
 import sys
 
+from pathlib import Path
+
 from ansible.parsing.vault import is_encrypted_file
 
-if sys.version_info >= (3, 0):
-    import ansible_vault_rekey.ansible_vault_rekey as rekey
-else:
-    import ansible_vault_rekey as rekey
-
+from ansible_vault_rekey.vaults import VaultFile, PartialVaultFile
+from ansible_vault_rekey.exceptions import BackupError, EncryptError, DecryptError
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
-
 
 log_console = logging.StreamHandler()
 log_console.setLevel(logging.INFO)
@@ -29,112 +27,60 @@ log.addHandler(log_console)
 @click.option('--debug', 'debug', default=False, is_flag=True)
 @click.option('--dry-run', 'dry_run', default=False, is_flag=True,
               help="Skip any action that would overwrite an original file.")
-@click.option('--keep-backups', '-k', 'keep_backups', default=False, is_flag=True,
+@click.option('--backup', '-k', type=str,
               help='Keep unencrypted copies of files after a successful rekey.')
-@click.option('--code-path', '-r', 'code_path', default='.',
-              help='Path to Ansible code.')
-@click.option('--password-file', '-p', 'password_file', default=None,
-              type=str, help='Path to password file. Default: vault-password.txt')
+@click.option('--code-path', '-r', 'code_path', default='.', type=click.Path(exists=True, file_okay=False,
+                writable=True), help='Path to Ansible code.')
+@click.option('--password-file', '-p', 'password_file', default='vault-password.txt', type=click.File('rb'),
+                help='Path to password file; - means STDIN. Default: vault-password.txt')
 @click.option('--vars-file', '-v', 'varsfile', type=str, default=None,
               help='Only operate on the file specified. Default is to check every file for encrypted assets.')
-def main(password_file, varsfile, code_path, dry_run, keep_backups, debug):
-    """(Re)keys Ansible Vault repos."""
-    if debug:
-        log_console.setLevel(logging.DEBUG)
+def main(password_file, varsfile, code_path, dry_run, backup, debug):
+    code_path = Path(code_path)
 
-    if not os.path.isdir(code_path):
-        log.error("{} doesn't seem to exist".format(code_path))
-        sys.exit(1)
-    code_path = os.path.realpath(code_path)
-
-    backup_path = os.path.join(code_path, ".rekey-backups")
-    log.debug('Backup path set to: {}'.format(backup_path))
-
-    if not password_file:
-        password_file = os.path.join(code_path, 'vault-password.txt')
-    else:
-        if not os.path.isfile(password_file):
-            log.error("{} doesn't seem to exist".format(password_file))
-            sys.exit(1)
-        password_file = os.path.realpath(password_file)
+    vaults = []
+    exclude = ['.rekey-backups', '.git', '.j2']
 
     # find all files
-    files = [os.path.realpath(varsfile)] if varsfile else rekey.find_files(code_path)
+    for f in code_path.rglob('*.y*ml'):
 
-    vault_files = []
-    for f in files:
-        with open(f, 'rb') as stream:
-            if is_encrypted_file(stream):
-                vault_files.append({'file': f})
-                continue
+        # Filter out files which are in excluded directory
+        if any(d in str(f) for d in exclude):
+            continue
 
-            if b'$ANSIBLE_VAULT;1.1;AES256' in stream.read():
-                # inline secrets
-                try:
-                    data = rekey.parse_yaml(f)
-                except Exception as e:
-                    log.warning('Unable to parse file, probably not valid yaml: {} {}'.format(happy_relpath(f), e))
-                    continue
+        vault = VaultFile.generator(f)
 
-                # enh, generator. w/e.
-                secrets = list(rekey.find_yaml_secrets(data)) if data else None
-                if secrets and len(secrets) > 0:
-                    vault_files.append({'file': f, 'secrets': secrets})
+        # Only add vault instances which are complete or has secrets
+        if type(vault) is VaultFile or vault.has_secrets():
+            vaults.append(vault)
+            log.debug("Found %s file", vault)
 
-    vflog = []
-    for i in vault_files:
-        suffix = " (whole)" if 'secrets' not in i.keys() else ""
-        vflog.append("{}{}".format(happy_relpath(i['file']), suffix))
+    # Read password from file
+    password = password_file.read().strip()
+    log.info("Found %d vaults files in %s", len(vaults), code_path)
 
-    log.info('Found {} vault-enabled files: {}'.format(len(vflog), ', '.join(vflog)))
+    for vault in vaults:
+        try:
+            vault.decrypt(password)
 
-    log.info('Backing up encrypted and password files...')
-    # backup password file
-    rekey.backup_files([password_file], backup_path, code_path)
+            if not dry_run:
+                vault.encrypt(new_password)
 
-    # decrypt and write files out to unencbackup location (same relative paths)
-    for f in vault_files:
-        newpath = os.path.join(backup_path, f['file'][len(code_path) + 1:])
-        log.debug('Decrypting {} to {} using {}'.format(
-            happy_relpath(f['file']), happy_relpath(newpath), happy_relpath(password_file)))
-        rekey.decrypt_file(f['file'], password_file, newpath)
+            # Backup if backup_path is given
+            if backup_path:
+                vault.backup(backup_path)
 
-    # generate new password file
-    log.info('Generating new password file...')
-    if dry_run:
-        log.info('>> Dry run enabled, skipping overwrite. <<')
-    else:
-        rekey.write_password_file(password_file, overwrite=True)
-        log.info('Password file written: {}'.format(happy_relpath(password_file)))
+        except DecryptError as de:
+            log.error('Could not decrypt %s: %s', vault, de, exc_info=debug)
 
-    # loop through encrypted asset list, re-encrypt and overwrite originals
-    log.info('Re-encrypting assets with new password file...')
-    for f in vault_files:
-        # log.debug('Raw file obj: {}'.format(f))
-        oldpath = os.path.join(backup_path, happy_relpath(f['file']))
-        newpath = os.path.realpath(f['file'])
-        log.debug('Encrypting {} to {}'.format(happy_relpath(oldpath), happy_relpath(newpath)))
-        if dry_run:
-            log.info('>> Dry run enabled, skipping overwrite. <<')
-            r = True
-        else:
-            r = rekey.encrypt_file(oldpath, password_file, newpath, f.get('secrets', None))
-        if not r:
-            log.error('Encryption failed on {}'.format(oldpath))
+        except EncryptError as ee:
+            log.error('Could not encrypt %s: %s', vault, ee, exc_info=debug)
 
-    # test decryption of newly written assets?
+        except BackupError as be:
+            log.error('Could not backup %s: %s', vault, be, exc_info=debug)
 
-    # remove backups
-    if not keep_backups:
-        log.info('Removing backups...')
-        shutil.rmtree(backup_path)
-
-    log.info('Done!')
-
-
-def happy_relpath(path):
-    return path.replace(os.getcwd(), '.')
-
+        except Exception as e:
+            log.error('Unknown error occured for %s: %s', vault, e, exc_info=debug)
 
 if __name__ == "__main__":
     main()
