@@ -20,11 +20,20 @@ class VaultFile:
 
     @staticmethod
     def generator(path):
-        with open(path, 'r') as f:
-            if f.readline().startswith('$ANSIBLE_VAULT;1.1;AES256'):
-                return VaultFile(path)
-            else:
-                return PartialVaultFile(path)
+        try:
+            with open(path, 'r') as f:
+                if f.readline().startswith('$ANSIBLE_VAULT;1.1;AES256'):
+                    return VaultFile(path)
+                else:
+                    return PartialVaultFile(path)
+
+        except yaml.scanner.ScannerError as se:
+            log.error('Bad yml file identified at %s: %s', path, se)
+
+        except Exception as e:
+            log.error('Unknown error occured parsing file at %s: %s', path, e)
+
+        return None
 
     def __init__(self, rel_path):
         self.rel_path = rel_path
