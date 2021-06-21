@@ -6,11 +6,11 @@ import click
 import logging
 import os
 import shutil
+import secrets
+import string
 import sys
 
 from pathlib import Path
-
-from ansible.parsing.vault import is_encrypted_file
 
 from ansible_vault_rekey.vaults import VaultFile, PartialVaultFile
 from ansible_vault_rekey.exceptions import BackupError, EncryptError, DecryptError
@@ -33,9 +33,11 @@ log.addHandler(log_console)
                 writable=True), help='Path to Ansible code.')
 @click.option('--password-file', '-p', 'password_file', default='vault-password.txt', type=click.File('rb'),
                 help='Path to password file; - means STDIN. Default: vault-password.txt')
+@click.option('--generate-password', 'gen_pw', type=click.IntRange(min=8),
+                help='Generate random password of size;')
 @click.option('--vars-file', '-v', 'varsfile', type=str, default=None,
               help='Only operate on the file specified. Default is to check every file for encrypted assets.')
-def main(password_file, varsfile, code_path, dry_run, backup, debug):
+def main(password_file, varsfile, code_path, dry_run, backup, debug, gen_pw):
     code_path = Path(code_path)
 
     vaults = []
@@ -58,6 +60,12 @@ def main(password_file, varsfile, code_path, dry_run, backup, debug):
     # Read password from file
     password = password_file.read().strip()
     log.info("Found %d vaults files in %s", len(vaults), code_path)
+
+    # Parse new password for Vault files
+    if not gen_pw:
+        new_password = click.prompt('Enter new vault password', hide_input=True, confirmation_prompt=True)
+    else:
+        new_password = ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(gen_pw))
 
     for vault in vaults:
         try:
