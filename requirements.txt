@@ -1,2 +1,2 @@
-click~=7.1.2
+click==8.1.4
 ansible~=2.9.10
